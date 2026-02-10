@@ -6,8 +6,8 @@ services:
     platform: linux/arm64
     restart: always
     container_name: bitwarden
-    depends_on:
-      - proxy
+    ports:
+      - "80:80"
     volumes:
       - ./bitwarden:/data
     healthcheck:
@@ -17,8 +17,8 @@ services:
       retries: 5
       start_period: 10s
     environment:
-      DOMAIN: "https://${DOMAIN}"
-      IP_HEADER: X-Real-IP
+      DOMAIN: ${DOMAIN}
+      IP_HEADER: X-Forwarded-For
       ADMIN_TOKEN: ${ADMIN_TOKEN}
       SIGNUPS_ALLOWED: ${SIGNUPS_ALLOWED}
       SMTP_HOST: ${SMTP_HOST}
@@ -37,51 +37,15 @@ services:
       ORG_CREATION_USERS: ${ORG_CREATION_USERS}
       TZ: ${TZ}
 
-  proxy:
-    image: caddy:2-alpine
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflared
     platform: linux/arm64
     restart: always
-    container_name: proxy
-    ports:
-      - 80:80
-      - 443:443
-    volumes:
-      - ./caddy/config_file:/etc/caddy:ro
-      - ./caddy/data:/data
-      - ./caddy/config:/config
+    command: |
+      tunnel --no-autoupdate run --url http://bitwarden:80 --token ${TUNNEL_TOKEN}
     environment:
-      DOMAIN: ${DOMAIN}
-      EMAIL: ${EMAIL}
-      TZ: ${TZ}
-
-  ddns:
-    image: lscr.io/linuxserver/ddclient
-    platform: linux/arm64
-    restart: always
-    container_name: ddns
-    depends_on:
-      bitwarden:
-        condition: service_healthy
-    volumes:
-      - ./ddns:/config
-    environment:
-      PUID: ${PUID}
-      PGID: ${PGID}
-      TZ: ${TZ}
-
-  fail2ban:
-    image: crazymax/fail2ban:latest
-    platform: linux/arm64
-    restart: always
-    container_name: fail2ban
-    depends_on:
-      bitwarden:
-        condition: service_healthy
-    volumes:
-      - ./fail2ban:/data
-      - ./bitwarden:/bitwarden:ro
-      - /var/log:/var/log:ro
-    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN}
       TZ: ${TZ}
 
 watchtower:
